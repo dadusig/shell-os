@@ -87,13 +87,6 @@ void create_proccess_with_pipes(char *line)
 
 	//printf("pipes=%d\n", pipes);
 
-	char*** cmd = malloc(sizeof(char**) * (pipes+1));
-
-	for (int i = 0; i < pipes+1; i++)
-	{
-		cmd[i]=parse_command(commands[i]);
-	}
-
 	// char** cmd1 = parse_command(commands[0]);
 	// char** cmd2 = parse_command(commands[1]);
 	//
@@ -101,40 +94,87 @@ void create_proccess_with_pipes(char *line)
 	//
 	// printf("%s\n", cmd[1][0]);
 
-	pid_t pid = fork();
+	char*** cmd = malloc(sizeof(char**) * (pipes+1));
 
-	if (pid > 0)
+	for (int i = 0; i < pipes+1; i++)
 	{
-		waitpid(pid, NULL, 0);
+		cmd[i]=parse_command(commands[i]);
 	}
-	else if (pid == 0)
+
+	cmd = realloc(cmd, sizeof(char**)*(pipes+2));
+
+	cmd[pipes+1]=NULL;
+
+	int fd[2];
+
+	int fd_in=0;
+
+	pid_t pid;
+
+	while (*cmd != NULL)
 	{
-		int fd[2];
 		pipe(fd);
+		pid = fork();
 
-		pid_t pid2 = fork();
-
-		if (pid2 > 0)
+		if (pid == 0)
 		{
-			// I am the parent
-			dup2(fd[0], 0);
-			close(fd[1]);
-			close(fd[0]);
-			execvp(cmd[1][0], cmd[1]);
-			waitpid(pid, NULL, 0);
+			//i am the child
+			dup2(fd_in, 0); //change the input according to the old one
+            if (*(cmd + 1) != NULL)
+              dup2(fd[1], 1);
+            close(fd[0]);
+            execvp((*cmd)[0], *cmd);
+            exit(1);
 		}
-		else if (pid2 == 0)
+		else if (pid > 0)
 		{
-			dup2(fd[1], 1);
-			close(fd[0]);
-			close(fd[1]);
-			execvp(cmd[0][0], cmd[0]);
+			// i am the parent
+			wait(NULL);
+            close(fd[1]);
+            fd_in = fd[0]; //save the input for the next command
+            cmd++;
 		}
 		else
 			exit(1);
 	}
-	else
-		exit(1);
+
+
+
+
+	// pid_t pid = fork();
+	//
+	// if (pid > 0)
+	// {
+	// 	waitpid(pid, NULL, 0);
+	// }
+	// else if (pid == 0)
+	// {
+	// 	int fd[2];
+	// 	pipe(fd);
+	//
+	// 	pid_t pid2 = fork();
+	//
+	// 	if (pid2 > 0)
+	// 	{
+	// 		// I am the parent
+	// 		dup2(fd[0], 0);
+	// 		close(fd[1]);
+	// 		close(fd[0]);
+	// 		execvp(cmd[1][0], cmd[1]);
+	// 		waitpid(pid, NULL, 0);
+	// 	}
+	// 	else if (pid2 == 0)
+	// 	{
+	// 		dup2(fd[1], 1);
+	// 		close(fd[0]);
+	// 		close(fd[1]);
+	// 		execvp(cmd[0][0], cmd[0]);
+	// 	}
+	// 	else
+	// 		exit(1);
+	// }
+	// else
+	// 	exit(1);
 }
 
 char** create_array_of_arrays_of_strings(char *line, int* number)
