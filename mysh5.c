@@ -14,6 +14,7 @@ void cd(char** command);
 void create_proccess (char** command);
 void create_proccess_with_pipes(char *line);
 char** create_array_of_arrays_of_strings(char *line, int* number);
+char** cut_semi(char *line, int* number);
 
 int main(int argc, char const *argv[])
 {
@@ -40,41 +41,95 @@ int main(int argc, char const *argv[])
 		if (strcmp(line_input, "exit")==0)
 			break;
 
-		char* line;
-		char* rest = line_input;
-
-		while (line = strtok_r(rest, ";", &rest))
+		if (!has_pipes && !has_semi) //if there are no pipes in the input act as before
 		{
-			if (!has_pipes) //if there are no pipes in the input act as before
-			{
-				//split user input into tokens and convert it into an array of strings
-				char** command = parse_command(line);
+			//split user input into tokens and convert it into an array of strings
+			char** command = parse_command(line_input);
 
-				//if user gave more than one character (other than \n)
-				if (characters > 1)
+			//if user gave more than one character (other than \n)
+			if (characters > 1)
+			{
+				//if user input is cd
+				if (strcmp(command[0], "cd") == 0)
 				{
-					//if user input is cd
-					if (strcmp(command[0], "cd") == 0)
-					{
-						cd(command);
-						continue;
-					}
-					else //if user input is not a built-in
-					{
-						//let the fork begin
-						create_proccess(command);
-					}
-
+					cd(command);
+					continue;
 				}
-			}
-			else if (has_pipes > 0)
-			{
-				create_proccess_with_pipes(line);
+				else //if user input is not a built-in
+				{
+					//let the fork begin
+					create_proccess(command);
+				}
+
 			}
 		}
+		else if (has_pipes > 0 && !has_semi)
+		{
+			create_proccess_with_pipes(line_input);
+		}
+
+		if (has_semi>0)
+		{
+			int semi_tokens;
+			char** cmds = cut_semi(line_input, &semi_tokens);
+
+			for (int i = 0; i < semi_tokens; i++)
+			{
+				char* line=cmds[i];
+				if (!has_pipes) //if there are no pipes in the input act as before
+				{
+					//split user input into tokens and convert it into an array of strings
+					char** command = parse_command(line);
+
+					//if user gave more than one character (other than \n)
+					if (characters > 1)
+					{
+						//if user input is cd
+						if (strcmp(command[0], "cd") == 0)
+						{
+							cd(command);
+							continue;
+						}
+						else //if user input is not a built-in
+						{
+							//let the fork begin
+							create_proccess(command);
+						}
+
+					}
+				}
+				else if (has_pipes > 0)
+				{
+					create_proccess_with_pipes(line);
+				}
+			}
+		}
+
+
 	}
 
 	return 0;
+}
+
+char** cut_semi(char *line, int* number)
+{
+	int counter = 0;
+	char** cmds = malloc(sizeof(char*)*1);
+
+	char* token = strtok(line, ";");
+
+	while (token)
+	{
+		cmds = realloc(cmds, sizeof(char*)*(counter+1));
+		//printf("%s\n", token);
+		cmds[counter]=token;
+		counter++;
+		token = strtok(NULL, ";");
+	}
+
+	*number=counter;
+	return cmds;
+
 }
 
 void create_proccess_with_pipes(char *line)
@@ -292,7 +347,7 @@ void create_proccess (char** command)
 		//exec the desired, command with its parameters
 		//if the command failed, do nothing
 		if (execvp(command[0], command) == -1)
-			execlp("false", "false", NULL);
+			exit(1);
 	}
 	else
 	{

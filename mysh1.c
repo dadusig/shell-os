@@ -132,8 +132,8 @@ void create_proccess (char** command)
 		//i am the child
 		//exec the desired, command with its parameters
 		//if the command failed, do nothing
-		if (execvp(command[0], command) == -1)
-			execlp("false", "false", NULL);
+		if (execvp(command[0], command) < 0)
+			exit(1);
 	}
 	else
 	{

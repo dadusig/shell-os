@@ -235,7 +235,7 @@ void create_proccess (char** command)
 		//exec the desired, command with its parameters
 		//if the command failed, do nothing
 		if (execvp(command[0], command) == -1)
-			execlp("false", "false", NULL);
+			exit(1);
 	}
 	else
 	{
