@@ -13,7 +13,7 @@ char** parse_command(char *line);
 void cd(char** command);
 void create_proccess (char** command);
 void create_proccess_with_pipes(char *line);
-char** create_array_of_arrays_of_strings(char *line, int* number);
+char** create_array_of_cmds(char *line, int* number);
 
 int main(int argc, char const *argv[])
 {
@@ -76,24 +76,15 @@ void create_proccess_with_pipes(char *line)
 {
 	int pipes; //number of pipes found
 
-	char** commands = create_array_of_arrays_of_strings(line, &pipes);
+	char** commands = create_array_of_cmds(line, &pipes);
 
-	// at this point i have an array whom each slot contains a pointer
-	// to a pointer of the first part of each command
+	/*
+		line = "ls -l -a | sort -r | wc" (pipes = 2)
+		*commands[3] = { "ls -l -a ", " sort -r ", " wc"}
+	*/
 
-	// printf("%s\n", commands[0]);
-	// printf("%s\n", commands[1]);
-	//
-
-	//printf("pipes=%d\n", pipes);
-
-	// char** cmd1 = parse_command(commands[0]);
-	// char** cmd2 = parse_command(commands[1]);
-	//
-	// printf("%s\n", cmd[0][0]);
-	//
-	// printf("%s\n", cmd[1][0]);
-
+	//allocate as slots as the number of commands (pipes+1)
+	//and an extra slot to put a NULL (indicates the end)
 	char*** cmd = malloc(sizeof(char**) * (pipes+1));
 
 	for (int i = 0; i < pipes+1; i++)
@@ -101,83 +92,59 @@ void create_proccess_with_pipes(char *line)
 		cmd[i]=parse_command(commands[i]);
 	}
 
-	cmd = realloc(cmd, sizeof(char**)*(pipes+2));
-
-	cmd[pipes+1]=NULL;
+	/*
+		**cmd[3] = {
+			["ls", "-l", "-a", NULL],
+			["sort", "-r", NULL],
+			["wc", NULL]
+		}
+	*/
 
 	int fd[2];
 
-	int fd_in=0;
+	int fd_to_read = 0;
 
 	pid_t pid;
 
-	while (*cmd != NULL)
+	for (int i = 0; i < pipes+1; i++)
 	{
 		pipe(fd);
 		pid = fork();
 
-		if (pid == 0)
+		if (pid > 0) //i am the parent
 		{
-			//i am the child
-			dup2(fd_in, 0); //change the input according to the old one
-            if (*(cmd + 1) != NULL)
-              dup2(fd[1], 1);
-            close(fd[0]);
-            execvp((*cmd)[0], *cmd);
-            exit(1);
-		}
-		else if (pid > 0)
-		{
-			// i am the parent
-			wait(NULL);
+			waitpid(pid, NULL, 0);
             close(fd[1]);
-            fd_in = fd[0]; //save the input for the next command
-            cmd++;
+			//save the read end of pipe so as the next cmd to read the input
+            fd_to_read = fd[0];
+            cmd++; //consume cmd
+		}
+		else if (pid == 0) //i am the child
+		{
+			// replace stdin with read end of pipe (parent's output)
+			dup2(fd_to_read, 0);
+
+            if (i != pipes)
+			{
+				// if not last command, replace stdout with write end of pipe
+				// so as to write in the pipe, for the next cmd to read
+				dup2(fd[1], 1);
+			}
+			close(fd[1]);
+
+            if(execvp(*cmd[0], *cmd) < 0);
+            	exit(1);
 		}
 		else
+		{
+			perror("couldn't fork!");
 			exit(1);
+		}
 	}
 
-
-
-
-	// pid_t pid = fork();
-	//
-	// if (pid > 0)
-	// {
-	// 	waitpid(pid, NULL, 0);
-	// }
-	// else if (pid == 0)
-	// {
-	// 	int fd[2];
-	// 	pipe(fd);
-	//
-	// 	pid_t pid2 = fork();
-	//
-	// 	if (pid2 > 0)
-	// 	{
-	// 		// I am the parent
-	// 		dup2(fd[0], 0);
-	// 		close(fd[1]);
-	// 		close(fd[0]);
-	// 		execvp(cmd[1][0], cmd[1]);
-	// 		waitpid(pid, NULL, 0);
-	// 	}
-	// 	else if (pid2 == 0)
-	// 	{
-	// 		dup2(fd[1], 1);
-	// 		close(fd[0]);
-	// 		close(fd[1]);
-	// 		execvp(cmd[0][0], cmd[0]);
-	// 	}
-	// 	else
-	// 		exit(1);
-	// }
-	// else
-	// 	exit(1);
 }
 
-char** create_array_of_arrays_of_strings(char *line, int* number)
+char** create_array_of_cmds(char *line, int* number)
 {
 	char** commands;
 
