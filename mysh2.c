@@ -27,6 +27,7 @@ int main(int argc, char const *argv[])
 
 		//read user input
 		//getline is much more sophisticated than fgets
+		//getline re-allocates more space if buffer_size exceeds MAX_LEN
 		characters = getline(&line, &buffer_size, stdin);
 
 		//convert user input to the appropiate form

@@ -13,7 +13,7 @@ char** parse_command(char *line);
 void cd(char** command);
 void create_proccess (char** command);
 void create_proccess_with_pipes(char *line);
-char** create_array_of_arrays_of_strings(char *line, int* number);
+char** create_array_of_cmds(char *line);
 
 int main(int argc, char const *argv[])
 {
@@ -74,9 +74,7 @@ int main(int argc, char const *argv[])
 
 void create_proccess_with_pipes(char *line)
 {
-	int pipes; //number of pipes found
-
-	char** commands = create_array_of_arrays_of_strings(line, &pipes);
+	char** commands = create_array_of_cmds(line);
 
 	// at this point i have an array whom each slot contains a pointer
 	// to a pointer of the first part of each command
@@ -95,6 +93,7 @@ void create_proccess_with_pipes(char *line)
 
 	if (pid > 0)
 	{
+		//i am the first parent (the shell)
 		waitpid(pid, NULL, 0);
 	}
 	else if (pid == 0)
@@ -104,10 +103,15 @@ void create_proccess_with_pipes(char *line)
 
 		pid_t pid2 = fork();
 
+		//command format: left_command | right_command =>
+		//command format: cmd1[][] | cmd2[][]
+
 		if (pid2 > 0)
 		{
-			// I am the parent
-			dup2(fd[0], 0);
+			// I am the second parent, child of the first parent
+			// I must wait my child to finish with th left command
+			// so I can execute the right one
+			dup2(fd[0], 0); //don't read from stdin, replace it with the read end of the pipe
 			close(fd[1]);
 			close(fd[0]);
 			execvp(cmd2[0], cmd2);
@@ -115,7 +119,9 @@ void create_proccess_with_pipes(char *line)
 		}
 		else if (pid2 == 0)
 		{
-			dup2(fd[1], 1);
+			//i am the child of the second parent
+			//i must execute the left command. My parent is waiting my output.
+			dup2(fd[1], 1); //replace stdout with the write end of the pipe (fd[1])
 			close(fd[0]);
 			close(fd[1]);
 			execvp(cmd1[0], cmd1);
@@ -127,7 +133,7 @@ void create_proccess_with_pipes(char *line)
 		exit(1);
 }
 
-char** create_array_of_arrays_of_strings(char *line, int* number)
+char** create_array_of_cmds(char *line)
 {
 	char** commands;
 
@@ -143,8 +149,6 @@ char** create_array_of_arrays_of_strings(char *line, int* number)
 		}
 	}
 
-	*number=pipes;
-
 	commands = malloc(sizeof(char*)*(pipes+1));
 
 	char* token = strtok(line, "|");
@@ -158,6 +162,15 @@ char** create_array_of_arrays_of_strings(char *line, int* number)
 	}
 
 	return commands;
+
+	/*
+	input: "ls -l -a | wc -w"
+
+	*commands[2] =
+	--------------------------
+	| "ls -l -a " | " wc -w" |
+	--------------------------
+	*/
 }
 
 char* trim_line(char* line, int length, int* has_pipes)

@@ -27,6 +27,7 @@ int main(int argc, char const *argv[])
 
 		//read user input
 		//getline is much more sophisticated than fgets
+		//getline re-allocates more space if buffer_size exceeds MAX_LEN
 		characters = getline(&line, &buffer_size, stdin);
 
 		//convert user input to the appropiate form
@@ -131,7 +132,7 @@ void create_proccess (char** command)
 	{
 		//i am the child
 		//exec the desired, command with its parameters
-		//if the command failed, do nothing
+		//if the command failed, exit
 		if (execvp(command[0], command) < 0)
 			exit(1);
 	}
