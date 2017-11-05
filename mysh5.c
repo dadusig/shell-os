@@ -8,13 +8,14 @@
 #define MAX_LEN 1024
 
 /*------ Function Prototypes ------*/
-char* trim_line(char* line, int length, int* has_pipes, int* has_semi);
+char* trim_line(char* line, int length, int* has_pipes);
 char** parse_command(char *line);
 void cd(char** command);
 void create_proccess (char** command);
 void create_proccess_with_pipes(char *line);
-char** create_array_of_arrays_of_strings(char *line, int* number);
-char** cut_semi(char *line, int* number);
+char** create_array_of_cmds(char *line, int* number);
+void merge_spaces(char* line);
+char** cut_semi(char* line, int* slots);
 
 int main(int argc, char const *argv[])
 {
@@ -33,127 +34,74 @@ int main(int argc, char const *argv[])
 		characters = getline(&line_input, &buffer_size, stdin);
 
 		//convert user input to the appropiate form
-		int has_pipes = 0;
-		int has_semi = 0;
-		line_input = trim_line(line_input, characters, &has_pipes, &has_semi);
+		int total_pipes = 0;
+		line_input = trim_line(line_input, characters, &total_pipes);
 
 		//if user input is exit, then return with success
 		if (strcmp(line_input, "exit")==0)
 			break;
 
-		if (!has_pipes && !has_semi) //if there are no pipes in the input act as before
-		{
-			//split user input into tokens and convert it into an array of strings
-			char** command = parse_command(line_input);
+		int slots = 0;
+		char** semi_lines = cut_semi(line_input, &slots);
 
-			//if user gave more than one character (other than \n)
-			if (characters > 1)
+		for (int i = 0; i < slots; i++)
+		{
+			char* line = semi_lines[i];
+			int has_pipes = 0;
+			line = trim_line(line, strlen(line), &has_pipes);
+
+			//if first char is space, ignore it
+			if (line[0] == ' ')
+				line++;
+
+			if (strcmp(line, "exit")==0)
+				return 0;
+
+			if (!has_pipes) //if there are no pipes in the input act as before
 			{
-				//if user input is cd
-				if (strcmp(command[0], "cd") == 0)
+				//split user input into tokens and convert it into an array of strings
+				char** command = parse_command(line);
+
+				//if user gave more than one character (other than \n)
+				if (characters > 1)
 				{
-					cd(command);
-					continue;
-				}
-				else //if user input is not a built-in
-				{
-					//let the fork begin
-					create_proccess(command);
-				}
-
-			}
-		}
-		else if (has_pipes > 0 && !has_semi)
-		{
-			create_proccess_with_pipes(line_input);
-		}
-
-		if (has_semi>0)
-		{
-			int semi_tokens;
-			char** cmds = cut_semi(line_input, &semi_tokens);
-
-			for (int i = 0; i < semi_tokens; i++)
-			{
-				char* line=cmds[i];
-				if (!has_pipes) //if there are no pipes in the input act as before
-				{
-					//split user input into tokens and convert it into an array of strings
-					char** command = parse_command(line);
-
-					//if user gave more than one character (other than \n)
-					if (characters > 1)
+					//if user input is cd
+					if (strcmp(command[0], "cd") == 0)
 					{
-						//if user input is cd
-						if (strcmp(command[0], "cd") == 0)
-						{
-							cd(command);
-							continue;
-						}
-						else //if user input is not a built-in
-						{
-							//let the fork begin
-							create_proccess(command);
-						}
-
+						cd(command);
+						continue;
 					}
-				}
-				else if (has_pipes > 0)
-				{
-					create_proccess_with_pipes(line);
+					else //if user input is not a built-in
+					{
+						//let the fork begin
+						create_proccess(command);
+					}
+
 				}
 			}
+			else if (has_pipes > 0)
+			{
+				create_proccess_with_pipes(line);
+			}
 		}
-
-
 	}
 
 	return 0;
-}
-
-char** cut_semi(char *line, int* number)
-{
-	int counter = 0;
-	char** cmds = malloc(sizeof(char*)*1);
-
-	char* token = strtok(line, ";");
-
-	while (token)
-	{
-		cmds = realloc(cmds, sizeof(char*)*(counter+1));
-		//printf("%s\n", token);
-		cmds[counter]=token;
-		counter++;
-		token = strtok(NULL, ";");
-	}
-
-	*number=counter;
-	return cmds;
-
 }
 
 void create_proccess_with_pipes(char *line)
 {
 	int pipes; //number of pipes found
 
-	char** commands = create_array_of_arrays_of_strings(line, &pipes);
+	char** commands = create_array_of_cmds(line, &pipes);
 
-	// at this point i have an array whom each slot contains a pointer
-	// to a pointer of the first part of each command
+	/*
+		line = "ls -l -a | sort -r | wc" (pipes = 2)
+		*commands[3] = { "ls -l -a ", " sort -r ", " wc"}
+	*/
 
-	// printf("%s\n", commands[0]);
-	// printf("%s\n", commands[1]);
-	//
-
-	//printf("pipes=%d\n", pipes);
-
-	// char** cmd1 = parse_command(commands[0]);
-	// char** cmd2 = parse_command(commands[1]);
-	//
-	// printf("%s\n", cmd[0][0]);
-	//
-	// printf("%s\n", cmd[1][0]);
-
+	//allocate as slots as the number of commands (pipes+1)
+	//and an extra slot to put a NULL (indicates the end)
 	char*** cmd = malloc(sizeof(char**) * (pipes+1));
 
 	for (int i = 0; i < pipes+1; i++)
@@ -161,83 +109,59 @@ void create_proccess_with_pipes(char *line)
 		cmd[i]=parse_command(commands[i]);
 	}
 
-	cmd = realloc(cmd, sizeof(char**)*(pipes+2));
-
-	cmd[pipes+1]=NULL;
+	/*
+		**cmd[3] = {
+			["ls", "-l", "-a", NULL],
+			["sort", "-r", NULL],
+			["wc", NULL]
+		}
+	*/
 
 	int fd[2];
 
-	int fd_in=0;
+	int fd_to_read = 0;
 
 	pid_t pid;
 
-	while (*cmd != NULL)
+	for (int i = 0; i < pipes+1; i++)
 	{
 		pipe(fd);
 		pid = fork();
 
-		if (pid == 0)
+		if (pid > 0) //i am the parent
 		{
-			//i am the child
-			dup2(fd_in, 0); //change the input according to the old one
-            if (*(cmd + 1) != NULL)
-              dup2(fd[1], 1);
-            close(fd[0]);
-            execvp((*cmd)[0], *cmd);
-            exit(1);
-		}
-		else if (pid > 0)
-		{
-			// i am the parent
-			wait(NULL);
+			waitpid(pid, NULL, 0);
             close(fd[1]);
-            fd_in = fd[0]; //save the input for the next command
-            cmd++;
+			//save the read end of pipe so as the next cmd to read the input
+            fd_to_read = fd[0];
+            cmd++; //consume cmd
+		}
+		else if (pid == 0) //i am the child
+		{
+			// replace stdin with read end of pipe (parent's output)
+			dup2(fd_to_read, 0);
+
+            if (i != pipes)
+			{
+				// if not last command, replace stdout with write end of pipe
+				// so as to write in the pipe, for the next cmd to read
+				dup2(fd[1], 1);
+			}
+			close(fd[1]);
+
+            if(execvp(*cmd[0], *cmd) < 0);
+            	exit(1);
 		}
 		else
+		{
+			perror("couldn't fork!");
 			exit(1);
+		}
 	}
 
-
-
-
-	// pid_t pid = fork();
-	//
-	// if (pid > 0)
-	// {
-	// 	waitpid(pid, NULL, 0);
-	// }
-	// else if (pid == 0)
-	// {
-	// 	int fd[2];
-	// 	pipe(fd);
-	//
-	// 	pid_t pid2 = fork();
-	//
-	// 	if (pid2 > 0)
-	// 	{
-	// 		// I am the parent
-	// 		dup2(fd[0], 0);
-	// 		close(fd[1]);
-	// 		close(fd[0]);
-	// 		execvp(cmd[1][0], cmd[1]);
-	// 		waitpid(pid, NULL, 0);
-	// 	}
-	// 	else if (pid2 == 0)
-	// 	{
-	// 		dup2(fd[1], 1);
-	// 		close(fd[0]);
-	// 		close(fd[1]);
-	// 		execvp(cmd[0][0], cmd[0]);
-	// 	}
-	// 	else
-	// 		exit(1);
-	// }
-	// else
-	// 	exit(1);
 }
 
-char** create_array_of_arrays_of_strings(char *line, int* number)
+char** create_array_of_cmds(char *line, int* number)
 {
 	char** commands;
 
@@ -270,10 +194,15 @@ char** create_array_of_arrays_of_strings(char *line, int* number)
 	return commands;
 }
 
-char* trim_line(char* line, int length, int* has_pipes, int* has_semi)
+char* trim_line(char* line, int length, int* has_pipes)
 {
 	//replace \n with \0
-	line[length-1]='\0';
+	if (line[length-1] == '\n')
+		line[length-1]='\0';
+
+	merge_spaces(line);
+
+	*has_pipes = 0;
 
 	//replace all tabs with whitespace
 	for (int i = 0; i < length; i++)
@@ -282,8 +211,6 @@ char* trim_line(char* line, int length, int* has_pipes, int* has_semi)
 			line[i]=' ';
 		else if (line[i] == '|')
 			*has_pipes = *has_pipes + 1;
-		else if (line[i] == ';')
-			*has_semi = *has_semi + 1;
 	}
 	return line;
 }
@@ -354,4 +281,48 @@ void create_proccess (char** command)
 		perror("Couldn't fork! :-(");
 		exit(1);
 	}
+}
+
+void merge_spaces(char* line)
+{
+	char *merged = line;
+    //while i reach the end of the string
+    while (*line != '\0')
+    {
+        //loop while the current and the next character are spaces
+        while (*line == ' ' && *(line + 1) == ' ')
+		{
+			line++;
+		}
+
+	   *merged = *line;
+	   *merged++;
+	   *line++;
+    }
+    //terminate the merged string
+    *merged = '\0';
+}
+
+char** cut_semi(char* line, int* slots)
+{
+	char** semi_lines = malloc(sizeof(char*));
+
+	int counter=0;
+	char* token = strtok(line, ";");
+	while (token)
+	{
+		if (strcmp(token, " ") ==0 )
+		{
+			strcpy(token, "false");
+		}
+
+		semi_lines = realloc(semi_lines, sizeof(char*) * (counter + 1));
+		semi_lines[counter] = token;
+		counter++;
+		token = strtok(NULL, ";");
+	}
+
+	*slots = counter;
+
+	return semi_lines;
 }
