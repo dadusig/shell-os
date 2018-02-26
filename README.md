@@ -18,4 +18,4 @@ Adds functionality for semicolon-seperated expressions of commands (which may in
 
 ![#f03c15](https://placehold.it/15/f03c15/000000?text=+) `Note addressed to fellowCEID student:`
 
-In case this is your assignment, don't try to copy it. **Grader** will detect you as plagiarism detection techniques ARE  applied and they are more clever than you think. You're more than welcome to take a hint from my code or contact me.
+In case this is your assignment, don't try to copy it. **Grader** will detect you, as plagiarism detection techniques ARE  applied and they are more clever than you think. You're more than welcome to take a hint from my code or contact me.
