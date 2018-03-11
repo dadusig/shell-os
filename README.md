@@ -1,6 +1,6 @@
-#  C Shell implementation
+#  C Shell implementation ![semester](https://img.shields.io/badge/Winter%20Semester-2017--2018-green.svg)
 
-2nd assignment of Operating Systems course, taught in Spring Semester of 2017-2018.
+2nd assignment of Operating Systems course, taught in Winter Semester of 2017-2018.
 
 **mysh1** **&** **mysh2**:
 Any command with unknown number of parameters
